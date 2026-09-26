@@ -1,0 +1,5 @@
+build/
+packer_cache/
+build.log
+.claude/
+thoughts/

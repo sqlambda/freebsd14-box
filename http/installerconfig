@@ -1,0 +1,63 @@
+# bsdinstall script for the freebsd14 box. Fetched over Packer's HTTP server
+# by the boot command and run as `bsdinstall script /tmp/installerconfig`.
+#
+# Root disk is da0: the build attaches it through virtio-scsi, matching the
+# `disk_bus = "scsi"` the box's Vagrantfile sets. See README, "Root disk".
+
+PARTITIONS="da0 GPT { auto freebsd-ufs / }"
+DISTRIBUTIONS="kernel.txz base.txz"
+export nonInteractive="YES"
+
+#!/bin/sh
+# Everything below runs chrooted into the installed system.
+set -eu
+# The installer's PATH lacks /usr/local, where pkg puts everything.
+export PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/sbin:/usr/local/bin
+
+# Label the root partition and mount it by label, so the box still boots if a
+# consumer overrides disk_bus and root turns up as vtbd0 instead of da0.
+root_idx=$(gpart show -p da0 | awk '$4 == "freebsd-ufs" { sub(/^da0p/, "", $3); print $3 }')
+gpart modify -i "$root_idx" -l rootfs da0
+cat > /etc/fstab <<'EOF'
+# Device          Mountpoint  FStype  Options  Dump  Pass#
+/dev/gpt/rootfs   /           ufs     rw       1     1
+EOF
+
+cat > /etc/rc.conf <<'EOF'
+hostname="freebsd14"
+ifconfig_DEFAULT="SYNCDHCP"
+sshd_enable="YES"
+# Grow root to fill the disk on boot; never carve out swap while doing so.
+growfs_enable="YES"
+growfs_swap_size="0"
+dumpdev="NO"
+sendmail_enable="NONE"
+clear_tmp_enable="YES"
+EOF
+
+cat > /boot/loader.conf <<'EOF'
+autoboot_delay="2"
+# Console on both VGA and serial, so `virsh console` works.
+boot_multicons="YES"
+console="vidconsole,comconsole"
+EOF
+
+# The installer environment has no resolver; QEMU user networking answers DNS
+# on 10.0.2.3. cleanup.sh removes this file before the image is packaged.
+echo "nameserver 10.0.2.3" > /etc/resolv.conf
+env ASSUME_ALWAYS_YES=yes pkg bootstrap -f
+# python3 is the ports' default Python (3.12) plus the /usr/local/bin/python3
+# link Ansible's interpreter discovery looks for. It must stay the default:
+# FreeBSD builds py3*- packages (psycopg2 among them) for that version only.
+pkg install -y sudo python3
+python3 -c 'import sys; sys.exit(sys.version_info[:2] != (3, 12))' || {
+  echo "python3 is $(python3 -V), not 3.12: the ports default moved, decide deliberately" >&2
+  exit 1
+}
+
+# vagrant / vagrant, the Vagrant convention. Packer logs in with this password;
+# vagrant.sh installs the insecure keypair for everything after.
+echo vagrant | pw useradd vagrant -m -s /bin/sh -G wheel -c "Vagrant" -h 0
+echo vagrant | pw usermod root -h 0
+echo 'vagrant ALL=(ALL:ALL) NOPASSWD: ALL' > /usr/local/etc/sudoers.d/vagrant
+chmod 0440 /usr/local/etc/sudoers.d/vagrant

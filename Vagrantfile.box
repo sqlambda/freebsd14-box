@@ -1,0 +1,19 @@
+# Embedded in the box. A consumer's own Vagrantfile overrides any of this.
+
+Vagrant.configure("2") do |config|
+  config.vm.guest = :freebsd
+  config.ssh.shell = "sh"
+  # FreeBSD base has no rsync, and the default synced folder would need it.
+  config.vm.synced_folder ".", "/vagrant", disabled: true
+
+  config.vm.provider :libvirt do |lv|
+    lv.driver = "kvm"
+    # Root on virtio-scsi, so it is da0 and every disk a consumer attaches with
+    # :bus => 'virtio' numbers from vtbd0. Matches generic/freebsd14.
+    lv.disk_bus = "scsi"
+    lv.disk_controller_model = "virtio-scsi"
+    lv.nic_model_type = "virtio"
+    lv.memory = 2048
+    lv.cpus = 2
+  end
+end
