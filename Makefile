@@ -26,8 +26,15 @@ box: validate
 	rm -rf build/qemu build/*.sha256
 	$(PACKER) build -var box_version=$(VERSION) freebsd14.pkr.hcl
 
-add:
-	vagrant box add --force --name sqlambda/freebsd14 $(BOX)
+# Added through a one-box catalog rather than the bare .box file: a bare file
+# always registers as version 0, so a rebuild could not be told apart from the
+# build it replaced. The catalog carries VERSION, and the checksum packer wrote.
+add: build/metadata.json
+	vagrant box add --force build/metadata.json
+
+build/metadata.json: $(BOX).sha256
+	printf '{"name":"sqlambda/freebsd14","versions":[{"version":"%s","providers":[{"name":"libvirt","url":"file://%s","checksum_type":"sha256","checksum":"%s"}]}]}\n' \
+		$(VERSION) $(abspath $(BOX)) $$(cut -f1 $(BOX).sha256) > $@
 
 clean:
 	rm -rf build

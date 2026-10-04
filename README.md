@@ -43,7 +43,7 @@ does not depend on HashiCorp's plugin release service. Vagrant is needed only
 to use the box, not to build it.
 
     make box            # ISO → build/sqlambda-freebsd14-14.5.0-libvirt-amd64.box
-    make add            # vagrant box add it locally as sqlambda/freebsd14
+    make add            # vagrant box add it locally as sqlambda/freebsd14, version 14.5.0
 
 The ISO is cached in `packer_cache/`, so rebuilds do not download it again.
 
